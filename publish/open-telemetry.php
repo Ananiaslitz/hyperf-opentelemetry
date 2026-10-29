@@ -254,6 +254,14 @@ return [
                 'traces' => env('OTEL_INSTRUMENTATION_FEATURES_DYNAMODB_TRACES', true),
                 'metrics' => env('OTEL_INSTRUMENTATION_FEATURES_DYNAMODB_METRICS', true),
             ],
+            'command' => [
+                'traces' => env('OTEL_INSTRUMENTATION_FEATURES_COMMAND_TRACES', true),
+                'metrics' => env('OTEL_INSTRUMENTATION_FEATURES_COMMAND_METRICS', true),
+            ],
+            'crontab' => [
+                'traces' => env('OTEL_INSTRUMENTATION_FEATURES_CRONTAB_TRACES', true),
+                'metrics' => env('OTEL_INSTRUMENTATION_FEATURES_CRONTAB_METRICS', true),
+            ],
         ],
     ],
 ];

@@ -44,6 +44,8 @@ class ConfigProvider
                 Listener\MetricFlushListener::class,
                 Listener\OtelShutdownListener::class,
                 Listener\DbQueryExecutedListener::class,
+                Listener\CommandListener::class,
+                Listener\CrontabListener::class,
             ],
             'aspects' => [
                 Aspect\RedisAspect::class,
