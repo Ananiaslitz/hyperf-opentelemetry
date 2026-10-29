@@ -110,7 +110,7 @@ class ChannelBatchSpanProcessor implements SpanProcessorInterface
         }
 
         $this->initialized = true;
-        $this->exportContext = Context::getCurrent();
+        $this->exportContext = Context::getRoot();
         $this->channel = new Channel($this->channelCapacity);
         $this->startConsumer();
         $this->startFlushTimer();

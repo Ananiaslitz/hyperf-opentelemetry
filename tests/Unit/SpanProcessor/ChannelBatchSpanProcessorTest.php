@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace Tests\Unit\SpanProcessor;
 
 use Hyperf\OpenTelemetry\SpanProcessor\ChannelBatchSpanProcessor;
+use OpenTelemetry\API\Trace\NonRecordingSpan;
+use OpenTelemetry\API\Trace\Span;
+use OpenTelemetry\API\Trace\SpanContext;
 use OpenTelemetry\API\Trace\SpanContextInterface;
+use OpenTelemetry\Context\Context;
 use OpenTelemetry\SDK\Common\Future\CompletedFuture;
 use OpenTelemetry\SDK\Trace\ReadableSpanInterface;
 use OpenTelemetry\SDK\Trace\SpanDataInterface;
@@ -245,6 +249,40 @@ class ChannelBatchSpanProcessorTest extends TestCase
 
         // Should not crash or hang — just drops
         $this->assertTrue(true);
+
+        $processor->shutdown();
+    }
+
+    public function testExportDetachesActiveSpanContext(): void
+    {
+        $activeDuringExport = null;
+        $exporter = $this->createMock(SpanExporterInterface::class);
+        $exporter->method('export')
+            ->willReturnCallback(function () use (&$activeDuringExport) {
+                $activeDuringExport = Span::getCurrent()->getContext()->isValid();
+                return new CompletedFuture(true);
+            });
+
+        $processor = new ChannelBatchSpanProcessor(
+            exporter: $exporter,
+            maxBatchSize: 1,
+            channelCapacity: 10,
+            flushInterval: 60.0,
+        );
+
+        $parentSpan = new NonRecordingSpan(
+            SpanContext::create('0af7651916cd43dd8448eb211c80319c', 'b7ad6b7169203331')
+        );
+        $scope = $parentSpan->storeInContext(Context::getCurrent())->activate();
+
+        try {
+            $processor->onEnd($this->createSampledSpan());
+        } finally {
+            $scope->detach();
+        }
+
+        Coroutine::sleep(0.05);
+        $this->assertFalse($activeDuringExport);
 
         $processor->shutdown();
     }

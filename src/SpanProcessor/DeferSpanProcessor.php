@@ -32,7 +32,7 @@ class DeferSpanProcessor implements SpanProcessorInterface
     public function __construct(
         private readonly SpanExporterInterface $exporter,
     ) {
-        $this->exportContext = OtelContext::getCurrent();
+        $this->exportContext = OtelContext::getRoot();
     }
 
     public function onStart(ReadWriteSpanInterface $span, ContextInterface $parentContext): void

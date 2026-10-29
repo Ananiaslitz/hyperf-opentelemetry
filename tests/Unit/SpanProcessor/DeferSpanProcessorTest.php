@@ -6,7 +6,11 @@ namespace Tests\Unit\SpanProcessor;
 
 use Hyperf\Context\Context;
 use Hyperf\OpenTelemetry\SpanProcessor\DeferSpanProcessor;
+use OpenTelemetry\API\Trace\NonRecordingSpan;
+use OpenTelemetry\API\Trace\Span;
+use OpenTelemetry\API\Trace\SpanContext;
 use OpenTelemetry\API\Trace\SpanContextInterface;
+use OpenTelemetry\Context\Context as OtelContext;
 use OpenTelemetry\SDK\Common\Future\CompletedFuture;
 use OpenTelemetry\SDK\Trace\ReadableSpanInterface;
 use OpenTelemetry\SDK\Trace\SpanDataInterface;
@@ -164,6 +168,31 @@ class DeferSpanProcessorTest extends TestCase
 
         $this->assertCount(1, $exported);
         $this->assertSame($spanData, $exported[0]);
+    }
+
+    public function testImmediateExportDetachesActiveSpanContext(): void
+    {
+        $activeDuringExport = null;
+        $exporter = $this->createMock(SpanExporterInterface::class);
+        $exporter->method('export')
+            ->willReturnCallback(function () use (&$activeDuringExport) {
+                $activeDuringExport = Span::getCurrent()->getContext()->isValid();
+                return new CompletedFuture(true);
+            });
+
+        $parentSpan = new NonRecordingSpan(
+            SpanContext::create('0af7651916cd43dd8448eb211c80319c', 'b7ad6b7169203331')
+        );
+        $scope = $parentSpan->storeInContext(OtelContext::getCurrent())->activate();
+
+        try {
+            $processor = new DeferSpanProcessor($exporter);
+            $processor->onEnd($this->createSampledSpan($this->createMock(SpanDataInterface::class)));
+        } finally {
+            $scope->detach();
+        }
+
+        $this->assertFalse($activeDuringExport);
     }
 
     private function createSampledSpan(SpanDataInterface $spanData): ReadableSpanInterface
