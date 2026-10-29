@@ -21,8 +21,6 @@ final class SwooleGrpcTransport implements TransportInterface
 {
     private bool $closed = false;
 
-    private bool $requestSent = false;
-
     private ?Client $client = null;
 
     /**
@@ -53,10 +51,15 @@ final class SwooleGrpcTransport implements TransportInterface
         }
 
         for ($attempt = 0; $attempt < 2; ++$attempt) {
+            $client = null;
             try {
-                return $this->executeRequest($payload);
+                $client = $this->acquireClient();
+                $result = $this->executeRequest($client, $payload);
+                $this->releaseClient($client);
+
+                return $result;
             } catch (Throwable $e) {
-                $this->resetClient();
+                $client?->close();
                 if ($attempt === 0 && $this->isRetryable($e)) {
                     continue;
                 }
@@ -89,10 +92,8 @@ final class SwooleGrpcTransport implements TransportInterface
         return ! $this->closed;
     }
 
-    private function executeRequest(string $payload): FutureInterface
+    private function executeRequest(Client $client, string $payload): FutureInterface
     {
-        $this->requestSent = false;
-        $client = $this->getClient();
         $data = $this->compress($payload);
 
         $request = new Request();
@@ -109,7 +110,6 @@ final class SwooleGrpcTransport implements TransportInterface
             );
         }
 
-        $this->requestSent = true;
         $response = $this->callClient(static fn () => $client->recv($timeout));
         if ($response === false) {
             throw new RuntimeException(
@@ -127,13 +127,18 @@ final class SwooleGrpcTransport implements TransportInterface
         return new CompletedFuture(null);
     }
 
-    private function getClient(): Client
+    private function acquireClient(): Client
     {
-        if ($this->client !== null && $this->client->connected) {
-            return $this->client;
-        }
+        if ($this->client !== null) {
+            $client = $this->client;
+            $this->client = null;
 
-        $this->resetClient();
+            if ($client->connected) {
+                return $client;
+            }
+
+            $client->close();
+        }
 
         if ($this->clientFactory !== null) {
             $client = ($this->clientFactory)($this->host, $this->port, $this->ssl, $this->timeout);
@@ -141,46 +146,41 @@ final class SwooleGrpcTransport implements TransportInterface
                 throw new RuntimeException('gRPC client factory must return a Swoole HTTP/2 client');
             }
 
-            $this->client = $client;
-
-            return $this->client;
+            return $client;
         }
 
-        $this->client = new Client($this->host, $this->port, $this->ssl);
-        $this->client->set([
+        $client = new Client($this->host, $this->port, $this->ssl);
+        $client->set([
             'timeout' => $this->timeout,
         ]);
 
-        if (! $this->client->connect()) {
-            $message = $this->client->errMsg;
-            $this->client = null;
+        if (! $client->connect()) {
+            $message = $client->errMsg;
 
             throw new RuntimeException(
                 "Failed to connect to {$this->host}:{$this->port}: " . $message
             );
         }
 
-        return $this->client;
+        return $client;
     }
 
-    private function resetClient(): void
+    private function releaseClient(Client $client): void
     {
-        if ($this->client === null) {
+        if ($this->closed || $this->client !== null || ! $client->connected) {
+            $client->close();
             return;
         }
 
-        $client = $this->client;
-        $this->client = null;
-        $client->close();
+        $this->client = $client;
     }
 
     private function isRetryable(Throwable $error): bool
     {
-        if ($this->requestSent) {
+        $message = strtolower($error->getMessage());
+        if (str_starts_with($message, 'failed to receive grpc response:')) {
             return false;
         }
-
-        $message = strtolower($error->getMessage());
         if (str_starts_with($message, 'failed to send grpc request:')) {
             return true;
         }

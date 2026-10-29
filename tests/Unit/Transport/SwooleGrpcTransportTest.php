@@ -197,6 +197,32 @@ class SwooleGrpcTransportTest extends TestCase
         ], $seen);
     }
 
+    public function testConcurrentSendsDoNotShareInFlightClient(): void
+    {
+        $created = [];
+        $transport = null;
+        $transport = $this->transport(function () use (&$created, &$transport): Client {
+            $index = count($created);
+            $client = new ReentrantHttp2Client(
+                onRecv: function () use ($index, &$transport): void {
+                    if ($index === 0) {
+                        $transport->send('nested concurrent payload')->await();
+                    }
+                }
+            );
+            $created[] = $client;
+
+            return $client;
+        });
+
+        $this->assertNull($transport->send('outer payload')->await());
+        $this->assertCount(2, $created);
+        $this->assertSame(1, $created[0]->activeCallsMax);
+        $this->assertSame(1, $created[1]->activeCallsMax);
+        $this->assertSame($created[1], $this->storedClient($transport));
+        $this->assertTrue($created[0]->wasClosed);
+    }
+
     private function transport(?Closure $clientFactory = null): SwooleGrpcTransport
     {
         return new SwooleGrpcTransport(
@@ -299,5 +325,51 @@ class DeprecatingHttp2Client extends Client
         $response->headers = ['grpc-status' => '0'];
 
         return $response;
+    }
+}
+
+class ReentrantHttp2Client extends Client
+{
+    public int $activeCalls = 0;
+
+    public int $activeCallsMax = 0;
+
+    public bool $wasClosed = false;
+
+    public function __construct(
+        private readonly Closure $onRecv,
+    ) {
+        parent::__construct('127.0.0.1', 9, false);
+        $this->connected = true;
+    }
+
+    public function send(Request $request): false | int
+    {
+        ++$this->activeCalls;
+        $this->activeCallsMax = max($this->activeCallsMax, $this->activeCalls);
+
+        return 1;
+    }
+
+    public function recv(float $timeout = 0): false | Response
+    {
+        try {
+            ($this->onRecv)();
+
+            $response = new Response();
+            $response->headers = ['grpc-status' => '0'];
+
+            return $response;
+        } finally {
+            --$this->activeCalls;
+        }
+    }
+
+    public function close(): bool
+    {
+        $this->wasClosed = true;
+        $this->connected = false;
+
+        return parent::close();
     }
 }
