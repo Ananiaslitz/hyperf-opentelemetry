@@ -9,6 +9,7 @@ use Hyperf\Contract\StdoutLoggerInterface;
 use Hyperf\Event\Contract\ListenerInterface;
 use Hyperf\Framework\Event\OnWorkerExit;
 use Hyperf\OpenTelemetry\Listener\OtelShutdownListener;
+use OpenTelemetry\SDK\Logs\LoggerProviderInterface;
 use OpenTelemetry\SDK\Metrics\MeterProviderInterface;
 use OpenTelemetry\SDK\Trace\TracerProviderInterface;
 use PHPUnit\Framework\TestCase;
@@ -44,13 +45,15 @@ class OtelShutdownListenerTest extends TestCase
     {
         $meterProvider = $this->createMock(MeterProviderInterface::class);
         $tracerProvider = $this->createMock(TracerProviderInterface::class);
+        $loggerProvider = $this->createMock(LoggerProviderInterface::class);
         $logger = $this->createMock(StdoutLoggerInterface::class);
 
         $tracerProvider->expects($this->once())->method('shutdown');
         $meterProvider->expects($this->once())->method('shutdown');
+        $loggerProvider->expects($this->once())->method('shutdown');
         $logger->expects($this->never())->method('warning');
 
-        $listener = new OtelShutdownListener($meterProvider, $tracerProvider, $logger);
+        $listener = new OtelShutdownListener($meterProvider, $tracerProvider, $logger, $loggerProvider);
         $listener->process(new OnWorkerExit($this->createMock(Server::class), 0));
     }
 
@@ -77,6 +80,20 @@ class OtelShutdownListenerTest extends TestCase
         $logger->expects($this->atLeastOnce())->method('warning')->with($this->stringContains('meter'));
 
         $listener = new OtelShutdownListener($meterProvider, $tracerProvider, $logger);
+        $listener->process(new OnWorkerExit($this->createMock(Server::class), 0));
+    }
+
+    public function testProcessLogsWarningOnLoggerProviderException(): void
+    {
+        $meterProvider = $this->createMock(MeterProviderInterface::class);
+        $tracerProvider = $this->createMock(TracerProviderInterface::class);
+        $loggerProvider = $this->createMock(LoggerProviderInterface::class);
+        $logger = $this->createMock(StdoutLoggerInterface::class);
+
+        $loggerProvider->method('shutdown')->willThrowException(new RuntimeException('logger error'));
+        $logger->expects($this->atLeastOnce())->method('warning')->with($this->stringContains('logger'));
+
+        $listener = new OtelShutdownListener($meterProvider, $tracerProvider, $logger, $loggerProvider);
         $listener->process(new OnWorkerExit($this->createMock(Server::class), 0));
     }
 }

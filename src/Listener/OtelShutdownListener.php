@@ -9,6 +9,7 @@ use Hyperf\Contract\StdoutLoggerInterface;
 use Hyperf\Coroutine\Coroutine;
 use Hyperf\Event\Contract\ListenerInterface;
 use Hyperf\Framework\Event\OnWorkerExit;
+use OpenTelemetry\SDK\Logs\LoggerProviderInterface;
 use OpenTelemetry\SDK\Metrics\MeterProviderInterface;
 use OpenTelemetry\SDK\Trace\TracerProviderInterface;
 use Throwable;
@@ -19,6 +20,7 @@ class OtelShutdownListener implements ListenerInterface
         protected readonly MeterProviderInterface $meterProvider,
         protected readonly TracerProviderInterface $tracerProvider,
         protected readonly StdoutLoggerInterface $logger,
+        protected readonly ?LoggerProviderInterface $loggerProvider = null,
     ) {
     }
 
@@ -43,6 +45,12 @@ class OtelShutdownListener implements ListenerInterface
                 $this->meterProvider->shutdown();
             } catch (Throwable $e) {
                 $this->logger->warning(sprintf('[OTel] meter shutdown failed: %s', $e->getMessage()));
+            }
+
+            try {
+                $this->loggerProvider?->shutdown();
+            } catch (Throwable $e) {
+                $this->logger->warning(sprintf('[OTel] logger shutdown failed: %s', $e->getMessage()));
             }
         });
     }
