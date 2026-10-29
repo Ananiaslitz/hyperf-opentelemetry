@@ -17,7 +17,10 @@ use Hyperf\OpenTelemetry\Factory\Trace\Processor\BatchSpanProcessorFactory;
 use Hyperf\OpenTelemetry\Factory\Trace\Processor\ChannelBatchSpanProcessorFactory;
 use Hyperf\OpenTelemetry\Factory\Trace\Processor\DeferSpanProcessorFactory;
 use Hyperf\OpenTelemetry\Factory\Trace\Processor\SimpleSpanProcessorFactory;
+use Hyperf\OpenTelemetry\Factory\Trace\Sampler\AlwaysOffSamplerFactory;
 use Hyperf\OpenTelemetry\Factory\Trace\Sampler\AlwaysOnSamplerFactory;
+use Hyperf\OpenTelemetry\Factory\Trace\Sampler\ParentBasedTraceIdRatioSamplerFactory;
+use Hyperf\OpenTelemetry\Factory\Trace\Sampler\TraceIdRatioBasedSamplerFactory;
 use Hyperf\OpenTelemetry\SpanProcessor\ChannelBatchSpanProcessor;
 use OpenTelemetry\SDK\Common\Export\TransportFactoryInterface;
 use OpenTelemetry\SDK\Logs\Processor\BatchLogRecordProcessor;
@@ -101,6 +104,21 @@ return [
         'samplers' => [
             'always_on' => [
                 'driver' => AlwaysOnSamplerFactory::class,
+            ],
+            'always_off' => [
+                'driver' => AlwaysOffSamplerFactory::class,
+            ],
+            'trace_id_ratio' => [
+                'driver' => TraceIdRatioBasedSamplerFactory::class,
+                'options' => [
+                    'ratio' => (float) env('OTEL_TRACES_SAMPLER_RATIO', 1.0),
+                ],
+            ],
+            'parent_based_trace_id_ratio' => [
+                'driver' => ParentBasedTraceIdRatioSamplerFactory::class,
+                'options' => [
+                    'ratio' => (float) env('OTEL_TRACES_SAMPLER_RATIO', 1.0),
+                ],
             ],
         ],
     ],
