@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Middleware;
 
+use FastRoute\Dispatcher;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\HttpMessage\Exception\HttpException;
+use Hyperf\HttpServer\Router\Dispatched;
+use Hyperf\HttpServer\Router\Handler;
 use Hyperf\OpenTelemetry\Instrumentation;
 use Hyperf\OpenTelemetry\Middleware\MetricMiddleware;
 use Hyperf\OpenTelemetry\Switcher;
@@ -442,6 +445,44 @@ class MetricMiddlewareTest extends TestCase
         $this->expectExceptionMessage('Test exception');
 
         $middleware->process($this->request, $handler);
+    }
+
+    public function testProcessUsesDispatchedRouteWhenAvailable(): void
+    {
+        $this->configureRequestMock('GET', '/users/custom-slug-123/orders');
+        $this->configureResponseMock(200);
+
+        $dispatched = new Dispatched([
+            Dispatcher::FOUND,
+            new Handler(null, '/users/{slug}/orders'),
+            ['slug' => 'custom-slug-123'],
+        ]);
+        $this->request->method('getAttribute')
+            ->with(Dispatched::class)
+            ->willReturn($dispatched);
+
+        $this->meter->method('createHistogram')->willReturn($this->histogram);
+
+        $this->histogram->expects($this->once())
+            ->method('record')
+            ->with(
+                $this->greaterThan(0),
+                [
+                    HttpAttributes::HTTP_ROUTE => '/users/{slug}/orders',
+                    HttpAttributes::HTTP_REQUEST_METHOD => 'GET',
+                    HttpAttributes::HTTP_RESPONSE_STATUS_CODE => 200,
+                ]
+            );
+
+        $middleware = new MetricMiddleware(
+            $this->config,
+            $this->instrumentation,
+            $this->switcher
+        );
+
+        $result = $middleware->process($this->request, $this->handler);
+
+        $this->assertSame($this->response, $result);
     }
 
     private function configureRequestMock(string $method, string $path): void

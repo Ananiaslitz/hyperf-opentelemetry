@@ -4,13 +4,29 @@ declare(strict_types=1);
 
 namespace Hyperf\OpenTelemetry\Middleware;
 
+use Hyperf\HttpServer\Router\Dispatched;
 use Hyperf\OpenTelemetry\Support\AbstractInstrumenter;
+use Hyperf\OpenTelemetry\Support\Uri;
 use Hyperf\Stringable\Str;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 
 abstract class AbstractMiddleware extends AbstractInstrumenter implements MiddlewareInterface
 {
+    protected function resolveRoute(ServerRequestInterface $request, string $maskConfigKey): string
+    {
+        $dispatched = $request->getAttribute(Dispatched::class);
+
+        if ($dispatched instanceof Dispatched && $dispatched->isFound() && ! empty($dispatched->handler?->route)) {
+            return $dispatched->handler->route;
+        }
+
+        return Uri::sanitize(
+            $request->getUri()->getPath(),
+            $this->config->get($maskConfigKey, [])
+        );
+    }
+
     protected function shouldIgnorePath(string $path): bool
     {
         $paths = $this->config->get(

@@ -6,7 +6,6 @@ namespace Hyperf\OpenTelemetry\Middleware;
 
 use Hyperf\OpenTelemetry\Support\HttpStatusCode;
 use Hyperf\OpenTelemetry\Support\MetricBoundaries;
-use Hyperf\OpenTelemetry\Support\Uri;
 use OpenTelemetry\SemConv\Attributes\ErrorAttributes;
 use OpenTelemetry\SemConv\Attributes\HttpAttributes;
 use OpenTelemetry\SemConv\Metrics\HttpMetrics;
@@ -32,10 +31,7 @@ class MetricMiddleware extends AbstractMiddleware
 
         $attributes = [
             HttpAttributes::HTTP_REQUEST_METHOD => $request->getMethod(),
-            HttpAttributes::HTTP_ROUTE => Uri::sanitize(
-                $request->getUri()->getPath(),
-                $this->config->get('open-telemetry.metrics.uri_mask', [])
-            ),
+            HttpAttributes::HTTP_ROUTE => $this->resolveRoute($request, 'open-telemetry.metrics.uri_mask'),
         ];
 
         try {
