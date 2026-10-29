@@ -7,6 +7,7 @@ namespace Tests\Unit;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\OpenTelemetry\Instrumentation;
 use Hyperf\OpenTelemetry\Switcher;
+use OpenTelemetry\API\Logs\LoggerInterface;
 use OpenTelemetry\API\Trace\TracerInterface;
 use PHPUnit\Framework\Attributes\TestWith;
 use PHPUnit\Framework\TestCase;
@@ -113,5 +114,34 @@ class SwitcherTest extends TestCase
         $switcher = new Switcher($instrumentation, $config);
 
         $this->assertFalse($switcher->isMetricsEnabled());
+    }
+
+    public function testIsLogsEnabledReturnsTrue(): void
+    {
+        $config = $this->createMock(ConfigInterface::class);
+        $config->method('get')->willReturn(true);
+
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->method('isEnabled')->willReturn(true);
+
+        $instrumentation = $this->createMock(Instrumentation::class);
+        $instrumentation->method('logger')->willReturn($logger);
+
+        $switcher = new Switcher($instrumentation, $config);
+
+        $this->assertTrue($switcher->isLogsEnabled());
+        $this->assertTrue($switcher->isLogsEnabled('feature1'));
+    }
+
+    public function testIsLogsEnabledReturnsFalseIfLoggerIsDisabled(): void
+    {
+        $config = $this->createMock(ConfigInterface::class);
+        $config->method('get')->willReturn(true);
+
+        $instrumentation = $this->createMock(Instrumentation::class);
+
+        $switcher = new Switcher($instrumentation, $config);
+
+        $this->assertFalse($switcher->isLogsEnabled());
     }
 }

@@ -7,6 +7,7 @@ namespace Tests\Unit;
 use Hyperf\OpenTelemetry\Instrumentation;
 use OpenTelemetry\API\Instrumentation\CachedInstrumentation;
 use OpenTelemetry\API\Instrumentation\Configurator;
+use OpenTelemetry\API\Logs\NoopLogger;
 use OpenTelemetry\API\Metrics\Noop\NoopMeter;
 use OpenTelemetry\API\Trace\NoopTracer;
 use OpenTelemetry\API\Trace\SpanBuilderInterface;
@@ -62,6 +63,12 @@ class InstrumentationTest extends TestCase
     {
         $instrumentation = new Instrumentation(new CachedInstrumentation('test'));
         $this->assertInstanceOf(NoopTracer::class, $instrumentation->tracer());
+    }
+
+    public function testGetLogger(): void
+    {
+        $instrumentation = new Instrumentation(new CachedInstrumentation('test'));
+        $this->assertInstanceOf(NoopLogger::class, $instrumentation->logger());
     }
 
     public function testGetPropagator(): void

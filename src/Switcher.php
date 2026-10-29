@@ -41,4 +41,16 @@ class Switcher
         return $this->isMetricsEnabled()
             && $this->config->get("open-telemetry.instrumentation.features.{$key}.metrics", true);
     }
+
+    public function isLogsEnabled(?string $key = null): bool
+    {
+        if ($key === null) {
+            return $this->instrumentation->logger()->isEnabled()
+                && $this->isEnabled()
+                && $this->config->get('open-telemetry.logs.enabled', true);
+        }
+
+        return $this->isLogsEnabled()
+            && $this->config->get("open-telemetry.instrumentation.features.{$key}.logs", true);
+    }
 }

@@ -7,6 +7,7 @@ namespace Hyperf\OpenTelemetry;
 use Hyperf\OpenTelemetry\Support\SpanScope;
 use OpenTelemetry\API\Globals;
 use OpenTelemetry\API\Instrumentation\CachedInstrumentation;
+use OpenTelemetry\API\Logs\LoggerInterface;
 use OpenTelemetry\API\Metrics\MeterInterface;
 use OpenTelemetry\API\Trace\TracerInterface;
 use OpenTelemetry\Context\Context;
@@ -28,6 +29,11 @@ class Instrumentation
     public function tracer(): TracerInterface
     {
         return $this->instrumentation->tracer();
+    }
+
+    public function logger(): LoggerInterface
+    {
+        return $this->instrumentation->logger();
     }
 
     public function propagator(): TextMapPropagatorInterface
