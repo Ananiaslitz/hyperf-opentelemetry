@@ -4,17 +4,21 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Aspect\Aws;
 
+use ArrayObject;
 use Exception;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\Di\Aop\ProceedingJoinPoint;
 use Hyperf\OpenTelemetry\Aspect\Aws\SnsClientAspect;
 use Hyperf\OpenTelemetry\Instrumentation;
+use Hyperf\OpenTelemetry\Propagator\AwsMessageAttributesPropagator;
 use Hyperf\OpenTelemetry\Support\SpanScope;
 use Hyperf\OpenTelemetry\Switcher;
 use OpenTelemetry\API\Metrics\HistogramInterface;
 use OpenTelemetry\API\Metrics\MeterInterface;
 use OpenTelemetry\API\Trace\SpanKind;
 use OpenTelemetry\API\Trace\StatusCode;
+use OpenTelemetry\Context\ContextInterface;
+use OpenTelemetry\Context\Propagation\TextMapPropagatorInterface;
 use OpenTelemetry\SemConv\Attributes\ErrorAttributes;
 use OpenTelemetry\SemConv\Incubating\Attributes\MessagingIncubatingAttributes as MsgAttributes;
 use PHPUnit\Framework\TestCase;
@@ -246,6 +250,44 @@ class SnsClientAspectTest extends TestCase
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('SNS error');
 
+        $aspect->process($this->proceedingJoinPoint);
+    }
+
+    public function testProcessInjectsTraceContextWhenCommandImplementsArrayAccess(): void
+    {
+        $command = new class('Publish', ['TopicArn' => 'arn:aws:sns:us-east-1:123456789012:my-topic']) extends ArrayObject {
+            public function __construct(private string $name, array $input)
+            {
+                parent::__construct($input);
+            }
+
+            public function getName(): string
+            {
+                return $this->name;
+            }
+
+            public function toArray(): array
+            {
+                return $this->getArrayCopy();
+            }
+        };
+
+        $this->proceedingJoinPoint->arguments = ['keys' => ['command' => $command]];
+
+        $context = $this->createMock(ContextInterface::class);
+        $this->spanScope->method('getContext')->willReturn($context);
+
+        $propagator = $this->createMock(TextMapPropagatorInterface::class);
+        $propagator->expects($this->once())
+            ->method('inject')
+            ->with($command, AwsMessageAttributesPropagator::instance(), $context);
+
+        $this->instrumentation->method('propagator')->willReturn($propagator);
+        $this->instrumentation->method('startSpan')->willReturn($this->spanScope);
+        $this->meter->method('createHistogram')->willReturn($this->histogram);
+        $this->proceedingJoinPoint->method('process')->willReturn(['MessageId' => 'msg-789']);
+
+        $aspect = new SnsClientAspect($this->config, $this->instrumentation, $this->switcher);
         $aspect->process($this->proceedingJoinPoint);
     }
 

@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Hyperf\OpenTelemetry\Aspect\Aws;
 
+use ArrayAccess;
 use Hyperf\Di\Aop\ProceedingJoinPoint;
 use Hyperf\OpenTelemetry\Aspect\AbstractAspect;
+use Hyperf\OpenTelemetry\Propagator\AwsMessageAttributesPropagator;
 use OpenTelemetry\API\Trace\SpanKind;
 use OpenTelemetry\API\Trace\StatusCode;
 use OpenTelemetry\SemConv\Attributes\ErrorAttributes;
@@ -50,6 +52,11 @@ class SnsClientAspect extends AbstractAspect
                     'aws.sns.topic.arn' => $topicArn,
                 ]
             );
+
+            if ($command instanceof ArrayAccess) {
+                $this->instrumentation->propagator()
+                    ->inject($command, AwsMessageAttributesPropagator::instance(), $scope->getContext());
+            }
         }
 
         try {
