@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Middleware;
 
+use FastRoute\Dispatcher;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\HttpMessage\Exception\HttpException;
+use Hyperf\HttpServer\Router\Dispatched;
+use Hyperf\HttpServer\Router\Handler;
 use Hyperf\OpenTelemetry\Instrumentation;
 use Hyperf\OpenTelemetry\Middleware\TraceMiddleware;
 use Hyperf\OpenTelemetry\Support\SpanScope;
@@ -145,6 +148,7 @@ class TraceMiddlewareTest extends TestCase
                 SpanKind::KIND_SERVER,
                 [
                     HttpAttributes::HTTP_REQUEST_METHOD => 'GET',
+                    HttpAttributes::HTTP_ROUTE => '/users/{number}',
                     UrlAttributes::URL_FULL => 'https://api.example.com:443/users/12?limit=10',
                     UrlAttributes::URL_PATH => '/users/12',
                     UrlAttributes::URL_SCHEME => 'https',
@@ -208,6 +212,7 @@ class TraceMiddlewareTest extends TestCase
                 SpanKind::KIND_SERVER,
                 [
                     HttpAttributes::HTTP_REQUEST_METHOD => 'GET',
+                    HttpAttributes::HTTP_ROUTE => '/users/{identifier}',
                     UrlAttributes::URL_FULL => 'https://api.example.com:443/users/P2P123?limit=10',
                     UrlAttributes::URL_PATH => '/users/P2P123',
                     UrlAttributes::URL_SCHEME => 'https',
@@ -513,6 +518,63 @@ class TraceMiddlewareTest extends TestCase
         );
 
         $middleware->process($this->request, $handler);
+    }
+
+    public function testProcessUsesDispatchedRouteWhenAvailable(): void
+    {
+        $this->configureRequestMock('GET', 'https://api.example.com:443/users/custom-slug-123?limit=10');
+        $this->configureResponseMock(200);
+
+        $dispatched = new Dispatched([
+            Dispatcher::FOUND,
+            new Handler(null, '/users/{slug}'),
+            ['slug' => 'custom-slug-123'],
+        ]);
+        $this->request->method('getAttribute')
+            ->with(Dispatched::class)
+            ->willReturn($dispatched);
+
+        $spanScope = $this->createMock(SpanScope::class);
+        $propagator = $this->createMock(TextMapPropagatorInterface::class);
+        $propagator->expects($this->once())
+            ->method('extract')
+            ->willReturn($context = $this->createMock(ContextInterface::class));
+
+        $this->instrumentation->expects($this->once())->method('propagator')->willReturn($propagator);
+
+        $this->instrumentation->expects($this->once())
+            ->method('startSpan')
+            ->with(
+                'GET /users/{slug}',
+                SpanKind::KIND_SERVER,
+                [
+                    HttpAttributes::HTTP_REQUEST_METHOD => 'GET',
+                    HttpAttributes::HTTP_ROUTE => '/users/{slug}',
+                    UrlAttributes::URL_FULL => 'https://api.example.com:443/users/custom-slug-123?limit=10',
+                    UrlAttributes::URL_PATH => '/users/custom-slug-123',
+                    UrlAttributes::URL_SCHEME => 'https',
+                    UrlAttributes::URL_QUERY => 'limit=10',
+                    ServerAttributes::SERVER_ADDRESS => 'api.example.com',
+                    ServerAttributes::SERVER_PORT => 443,
+                    UserAgentAttributes::USER_AGENT_ORIGINAL => 'TestAgent/1.0',
+                    ClientAttributes::CLIENT_ADDRESS => '192.168.1.100',
+                ],
+                $this->isType('int'),
+                $context
+            )
+            ->willReturn($spanScope);
+
+        $spanScope->expects($this->once())->method('end');
+
+        $middleware = new TraceMiddleware(
+            $this->config,
+            $this->instrumentation,
+            $this->switcher
+        );
+
+        $result = $middleware->process($this->request, $this->handler);
+
+        $this->assertSame($this->response, $result);
     }
 
     private function configureRequestMock(string $method, string $url, array $headers = []): void

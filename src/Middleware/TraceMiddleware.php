@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Hyperf\OpenTelemetry\Middleware;
 
 use Hyperf\OpenTelemetry\Support\HttpStatusCode;
-use Hyperf\OpenTelemetry\Support\Uri;
 use OpenTelemetry\API\Trace\SpanKind;
 use OpenTelemetry\SemConv\Attributes\ClientAttributes;
 use OpenTelemetry\SemConv\Attributes\HttpAttributes;
@@ -33,16 +32,15 @@ class TraceMiddleware extends AbstractMiddleware
 
         $context = $this->instrumentation->propagator()->extract($request->getHeaders());
 
-        $name = $request->getMethod() . ' ' . Uri::sanitize(
-            $path,
-            $this->config->get('open-telemetry.traces.uri_mask', [])
-        );
+        $route = $this->resolveRoute($request, 'open-telemetry.traces.uri_mask');
+        $name = $request->getMethod() . ' ' . $route;
 
         $scope = $this->instrumentation->startSpan(
             name: $name,
             spanKind: SpanKind::KIND_SERVER,
             attributes: [
                 HttpAttributes::HTTP_REQUEST_METHOD => $request->getMethod(),
+                HttpAttributes::HTTP_ROUTE => $route,
                 UrlAttributes::URL_FULL => (string) $request->getUri(),
                 UrlAttributes::URL_PATH => $request->getUri()->getPath(),
                 UrlAttributes::URL_SCHEME => $request->getUri()->getScheme(),
