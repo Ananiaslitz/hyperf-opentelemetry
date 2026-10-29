@@ -6,8 +6,10 @@ namespace Tests\Unit\Factory;
 
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\OpenTelemetry\Factory\SDKBuilder;
+use OpenTelemetry\API\Baggage\Propagation\BaggagePropagator;
 use OpenTelemetry\API\Globals;
 use OpenTelemetry\API\Trace\Propagation\TraceContextPropagator;
+use OpenTelemetry\Context\Propagation\MultiTextMapPropagator;
 use OpenTelemetry\SDK\Logs\LoggerProviderInterface;
 use OpenTelemetry\SDK\Logs\NoopLoggerProvider;
 use OpenTelemetry\SDK\Metrics\MeterProviderInterface;
@@ -82,5 +84,44 @@ class SDKBuilderTest extends TestCase
         $this->assertEquals($this->meterProvider, Globals::meterProvider());
         $this->assertEquals($this->loggerProvider, Globals::loggerProvider());
         $this->assertInstanceOf(TraceContextPropagator::class, Globals::propagator());
+    }
+
+    public function testBuildWithConfiguredMultiPropagators(): void
+    {
+        $config = $this->createMock(ConfigInterface::class);
+        $config->method('get')
+            ->with('open-telemetry.propagators')
+            ->willReturn(['tracecontext', 'baggage']);
+
+        $builder = new SDKBuilder(
+            $this->loggerProvider,
+            $this->tracerProvider,
+            $this->meterProvider,
+            $config
+        );
+
+        $builder->build();
+
+        $this->assertInstanceOf(MultiTextMapPropagator::class, Globals::propagator());
+        $this->assertSame(['traceparent', 'tracestate', 'baggage'], Globals::propagator()->fields());
+    }
+
+    public function testBuildWithSingleConfiguredPropagator(): void
+    {
+        $config = $this->createMock(ConfigInterface::class);
+        $config->method('get')
+            ->with('open-telemetry.propagators')
+            ->willReturn(['baggage']);
+
+        $builder = new SDKBuilder(
+            $this->loggerProvider,
+            $this->tracerProvider,
+            $this->meterProvider,
+            $config
+        );
+
+        $builder->build();
+
+        $this->assertInstanceOf(BaggagePropagator::class, Globals::propagator());
     }
 }
