@@ -52,6 +52,7 @@ class ConfigProvider
                 Aspect\Aws\SnsClientAspect::class,
                 Aspect\Aws\SqsClientAspect::class,
                 Aspect\MongoAspect::class,
+                Aspect\WithSpanAspect::class,
             ],
             'publish' => [
                 [
